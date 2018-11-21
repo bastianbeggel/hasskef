@@ -3,13 +3,13 @@ Supported: KEF LS50 Wireless (Requires up to date firmware)
 
 Untested: KEF LSX
 
-##Credit 
-This project is based on code from Gronis (https://github.com/Gronis/pykef) and investigations of chimpy (wireshark god).
+## Credit 
+This project is based on code from **Gronis** (https://github.com/Gronis/pykef) and investigations of **chimpy** (wireshark god).
 
 
 ## Features supported
 - Get and set volume
-- Mute and Unmute
+- Mute and unmute
 - Get and set source input
 - Turn off speaker
 
