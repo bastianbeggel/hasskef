@@ -7,6 +7,7 @@ import asyncio
 from datetime import timedelta
 from collections import OrderedDict
 from custom_components.media_player.pykef import *
+import json
 import logging
 import socket
 
@@ -19,7 +20,7 @@ from homeassistant.components.media_player import (
     MEDIA_TYPE_MUSIC, PLATFORM_SCHEMA, SUPPORT_CLEAR_PLAYLIST,
     SUPPORT_NEXT_TRACK, SUPPORT_PAUSE, SUPPORT_PLAY, SUPPORT_PLAY_MEDIA,
     SUPPORT_PREVIOUS_TRACK, SUPPORT_SEEK, SUPPORT_SELECT_SOURCE, SUPPORT_STOP,
-    SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET, SUPPORT_VOLUME_STEP,SUPPORT_TURN_OFF,
+    SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET, SUPPORT_VOLUME_STEP,SUPPORT_TURN_OFF,SUPPORT_TURN_ON,
     MediaPlayerDevice)
 from homeassistant.const import (
     CONF_HOST, CONF_NAME, CONF_PORT, STATE_IDLE, STATE_PAUSED, STATE_PLAYING,STATE_OFF , STATE_ON)
@@ -35,6 +36,10 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_NAME = 'KEFWIRELESS'
 DEFAULT_PORT = 50001
 DATA_KEFWIRELESS = 'kefwireless'
+VOLUME_STEP = 0.05
+CONF_TURN_ON_SERVICE = 'turn_on_service'
+CONF_TURN_ON_DATA = 'turn_on_data'
+
 
 # configure source options to communicate to HA
 KEF_LS50_SOURCE_DICT = OrderedDict([('1','WIFI'), ('2', 'BLUETOOTH'), ('3', 'AUX'), ('4', 'OPT'), ('5', 'USB')])
@@ -48,6 +53,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_HOST): cv.string,
     vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port ,
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+    vol.Optional(CONF_TURN_ON_SERVICE): cv.service,
+    vol.Optional(CONF_TURN_ON_DATA): cv.string,      
 })
 
 
@@ -58,24 +65,31 @@ def setup_platform(hass, config, add_devices,
     host = config.get(CONF_HOST)
     port = config.get(CONF_PORT)
     name = config.get(CONF_NAME)
+    turn_on_service = config.get(CONF_TURN_ON_SERVICE)
+    turn_on_data = config.get(CONF_TURN_ON_DATA)
 
-    _LOGGER.debug("Setting up " + DATA_KEFWIRELESS + " + using " + "host:" + str(host)+ ", port:" + str(port)+ ", name:" + str(name))
+
+    _LOGGER.info("Setting up " + DATA_KEFWIRELESS + " + using " + "host:" + str(host)+ ", port:" + str(port)+ ", name:" + str(name) + ", turn_on_service:" + str(turn_on_service) + ", turn_on_data:" + str(turn_on_data))
     _LOGGER.debug(
         "Setting up source_dict " + str(KEF_LS50_SOURCE_DICT))
 
     # Add devices
-    add_devices([KefWireless( name, host, port, KEF_LS50_SOURCE_DICT,hass)])
+    add_devices([KefWireless( name, host, port, turn_on_service,
+                             turn_on_data, KEF_LS50_SOURCE_DICT,hass)])
 
 class KefWireless(MediaPlayerDevice):
     """Kef Player Object."""
 
-    def __init__(self, name, host, port,source_dict, hass):
+    def __init__(self, name, host, port,turn_on_service, turn_on_data,source_dict, hass):
         """Initialize the media player."""
-        self.hass = hass
+        self._hass = hass
         self._name = name
         self._source_dict = source_dict
         self._reverse_mapping = {value: key for key, value in self._source_dict.items()}
         self._speaker = KefSpeaker(host, port)
+        self._turn_on_service = turn_on_service
+        self._turn_on_data = turn_on_data
+
 
         #set internal state to None
         self._state =None;
@@ -106,9 +120,6 @@ class KefWireless(MediaPlayerDevice):
 
     def __short_state_desc (self) :
         """Return a short text with key kef parameters to show in HA."""
-        _LOGGER.info("__short_state_desc -> self._mute:" + str(self._mute));
-        _LOGGER.info("__short_state_desc -> self._volume:" + str(self._volume));
-        _LOGGER.info("__short_state_desc -> self._source:" + str(self._source));
         if not (self._source is None or self._mute is None):
             if  self._mute:
                 return   str(self._source).split(".")[1] + " - " + "muted"
@@ -159,7 +170,8 @@ class KefWireless(MediaPlayerDevice):
     @property
     def supported_features(self):
         """Flag media player features that are supported."""
-        return SUPPORT_KEFWIRELESS
+        return (SUPPORT_KEFWIRELESS |
+                (SUPPORT_TURN_ON if self.__is_turning_on_supported() else 0))
 
     def turn_off(self):
         """Turn the media player off."""
@@ -233,3 +245,28 @@ class KefWireless(MediaPlayerDevice):
                 self._speaker.muted =  False
         except Exception :
             _LOGGER.warning("mute_volume: failed");
+
+    def __is_turning_on_supported(self):
+        return True #self._turn_on_service 
+
+    def turn_on(self):
+        """Turn the media player on via service call."""
+
+        # even if the SUPPORT_TURN_ON is not set as supported feature, HA still
+        # offers to call turn_on, thus we have to exit here to prevent errors
+        if (not self.__is_turning_on_supported() ):
+            return
+
+        # note that turn_on_service has the correct syntax as we validated the
+        # input
+        service_domain = self._turn_on_service.split(".")[0]
+        service_name = self._turn_on_service.split(".")[1]
+
+        # this might need some more work. The self._hass.services.call expects
+        # a python dict this input is specified as a string. I was not able to
+        # use config validation to make sure it is a dict
+        service_data = json.loads(self._turn_on_data)
+        self._hass.services.call(
+            service_domain, service_name, service_data, False)
+
+
