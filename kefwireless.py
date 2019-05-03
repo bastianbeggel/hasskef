@@ -1,6 +1,8 @@
 """
 Support for interfacing HA with the KEF Wireless Speakers .
 
+Ich wollte noch was ändern!!!
+
 """
 
 import asyncio
