@@ -2,6 +2,7 @@
 Support for interfacing HA with the KEF Wireless Speakers .
 
 Ich wollte noch was ändern!!!
+Ich wollte noch was ändern. Was viel wichtiger war. Habs nur vergessen. 
 
 """
 
